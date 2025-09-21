@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tic-Tac-Toe</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#ffffff; --line:#333; --x:#c62828; --o:#1565c0;
+      --accent:#2e7d32;
+    }
+    *{box-sizing:border-box;font-family:Inter,system-ui,Arial, sans-serif}
+    body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(180deg,#eef2ff,#f6f7fb);}
+    .app{width:min(420px,95vw);background:var(--card);padding:18px;border-radius:12px;box-shadow:0 10px 30px rgba(20,20,40,0.08)}
+    h1{margin:0 0 8px;font-size:20px;text-align:center}
+    .top{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+    .level-btn{padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer}
+    .level-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .scoreboard{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .score{font-size:14px}
+    .board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px;background:transparent}
+    .cell{background:#fff;border-radius:8px;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:54px;user-select:none;touch-action: manipulation;
+      box-shadow:inset 0 0 0 2px #eee, 0 4px 12px rgba(10,10,30,0.04);cursor:pointer}
+    .cell.disabled{cursor:not-allowed;opacity:0.9}
+    .controls{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+    .btn{padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer}
+    .message{height:28px;margin-top:10px;text-align:center;color:#333;font-weight:600}
+    small{display:block;margin-top:6px;color:#666;text-align:center}
+    @media (max-width:420px){ .cell{font-size:44px} }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Tic-Tac-Toe (vs Computer)</h1>
+
+    <div class="top">
+      <div>
+        <label style="font-size:13px;color:#444;display:block;margin-bottom:6px">Difficulty</label>
+        <div id="levels">
+          <button class="level-btn active" data-level="1">Easy</button>
+          <button class="level-btn" data-level="2">Medium</button>
+          <button class="level-btn" data-level="3">Hard</button>
+        </div>
+      </div>
+
+      <div style="margin-left:auto">
+        <div style="font-size:13px;color:#444;text-align:right">Player = X • Computer = O</div>
+      </div>
+    </div>
+
+    <div class="scoreboard">
+      <div class="score">You: <span id="score-player">0</span></div>
+      <div class="score">Computer: <span id="score-computer">0</span></div>
+      <div class="score">Draws: <span id="score-draw">0</span></div>
+    </div>
+
+    <div class="board" id="board">
+      <!-- cells injected by JS -->
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="restart">Restart Round</button>
+      <button class="btn" id="resetScores">Reset Scores</button>
+    </div>
+
+    <div class="message" id="message">Choose a square to start</div>
+    <small>Tap / Click squares. Works on mobile & desktop.</small>
+  </div>
+
+<script>
+(() => {
+  const boardEl = document.getElementById('board');
+  const messageEl = document.getElementById('message');
+  const levelsEl = document.getElementById('levels');
+  const scorePlayerEl = document.getElementById('score-player');
+  const scoreComputerEl = document.getElementById('score-computer');
+  const scoreDrawEl = document.getElementById('score-draw');
+  const restartBtn = document.getElementById('restart');
+  const resetScoresBtn = document.getElementById('resetScores');
+
+  let board = Array.from({length:9}, (_,i)=> (i+1).toString()); // '1'..'9' or 'X'/'O'
+  let player = 'X', computer = 'O';
+  let scores = {player:0, computer:0, draws:0};
+  let currentLevel = 1; // 1 easy, 2 medium, 3 hard
+  let busy = false; // prevents double-tap issues
+
+  // create grid cells
+  for(let i=0;i<9;i++){
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.dataset.index = i;
+    c.addEventListener('pointerdown', onCellClick);
+    boardEl.appendChild(c);
+  }
+
+  function render(){
+    const cells = boardEl.children;
+    for(let i=0;i<9;i++){
+      cells[i].textContent = (board[i] === 'X' || board[i] === 'O') ? board[i] : '';
+      cells[i].classList.toggle('disabled', board[i]==='X' || board[i]==='O');
+    }
+    scorePlayerEl.textContent = scores.player;
+    scoreComputerEl.textContent = scores.computer;
+    scoreDrawEl.textContent = scores.draws;
+  }
+
+  function show(msg){
+    messageEl.textContent = msg;
+  }
+
+  function onCellClick(e){
+    if(busy) return;
+    const i = +e.currentTarget.dataset.index;
+    if(board[i]==='X' || board[i]==='O') return;
+    playerMove(i);
+  }
+
+  function playerMove(i){
+    board[i] = player;
+    render();
+    if(checkWinner(board, player)){
+      scores.player++;
+      show('You win! 🎉');
+      endRound();
+      return;
+    }
+    if(isDraw(board)){
+      scores.draws++;
+      show("It's a draw.");
+      endRound();
+      return;
+    }
+    // computer's turn
+    busy = true;
+    show('Computer is thinking...');
+    setTimeout(()=> {
+      const move = chooseComputerMove(board, currentLevel);
+      board[move] = computer;
+      render();
+      if(checkWinner(board, computer)){
+        scores.computer++;
+        show('Computer wins 💻');
+        endRound();
+        busy = false;
+        return;
+      }
+      if(isDraw(board)){
+        scores.draws++;
+        show("It's a draw.");
+        endRound();
+        busy = false;
+        return;
+      }
+      show('Your turn');
+      busy = false;
+    }, 250); // small delay for UX
+  }
+
+  function endRound(){
+    render();
+    // disable any further moves until restart (we do this by marking busy)
+    busy = true;
+    // allow restart by pressing button
+  }
+
+  restartBtn.addEventListener('click', ()=> {
+    resetBoard();
+    busy = false;
+    show('New round — your turn');
+  });
+  resetScoresBtn.addEventListener('click', ()=> {
+    scores = {player:0, computer:0, draws:0};
+    resetBoard();
+    busy = false;
+    render();
+    show('Scores reset');
+  });
+
+  // Level selection
+  levelsEl.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button');
+    if(!btn) return;
+    const lvl = +btn.dataset.level;
+    currentLevel = lvl;
+    Array.from(levelsEl.children).forEach(b=>b.classList.toggle('active', +b.dataset.level === lvl));
+    show(['Easy','Medium','Hard'][lvl-1] + ' selected');
+  });
+
+  // ---------- Game logic helpers ----------
+  function checkWinner(b, p){
+    const wins = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+    return wins.some(([a,b1,c]) => b[a]===p && b[b1]===p && b[c]===p);
+  }
+  function isDraw(b){
+    return b.every(v => v === 'X' || v === 'O');
+  }
+  function availableMoves(b){
+    return b.map((v,i)=> (v!=='X' && v!=='O') ? i : -1).filter(i=>i>=0);
+  }
+
+  // Easy: random available
+  function easyMove(b){
+    const moves = availableMoves(b);
+    return moves[Math.floor(Math.random()*moves.length)];
+  }
+
+  // Medium: 50% random, else do a simple smart move (win/block else random)
+  function mediumMove(b){
+    if(Math.random() < 0.5) return easyMove(b);
+    // try to win
+    for(const m of availableMoves(b)){
+      b[m] = computer;
+      if(checkWinner(b, computer)){ b[m]= (m+1).toString(); return m; }
+      b[m] = (m+1).toString();
+    }
+    // try to block
+    for(const m of availableMoves(b)){
+      b[m] = player;
+      if(checkWinner(b, player)){ b[m] = (m+1).toString(); return m; }
+      b[m] = (m+1).toString();
+    }
+    return easyMove(b);
+  }
+
+  // Hard: Minimax (perfect)
+  function hardMove(b){
+    let bestScore = -Infinity;
+    let bestMove = null;
+    for(const m of availableMoves(b)){
+      b[m] = computer;
+      const score = minimax(b, false);
+      b[m] = (m+1).toString();
+      if(score > bestScore){ bestScore = score; bestMove = m; }
+    }
+    return bestMove;
+  }
+
+  function minimax(b, isMaximizing){
+    if(checkWinner(b, computer)) return 1;
+    if(checkWinner(b, player)) return -1;
+    if(isDraw(b)) return 0;
+    if(isMaximizing){
+      let best = -Infinity;
+      for(const m of availableMoves(b)){
+        b[m] = computer;
+        const s = minimax(b, false);
+        b[m] = (m+1).toString();
+        best = Math.max(best, s);
+      }
+      return best;
+    } else {
+      let best = Infinity;
+      for(const m of availableMoves(b)){
+        b[m] = player;
+        const s = minimax(b, true);
+        b[m] = (m+1).toString();
+        best = Math.min(best, s);
+      }
+      return best;
+    }
+  }
+
+  function chooseComputerMove(b, level){
+    if(level === 1) return easyMove(b);
+    if(level === 2) return mediumMove(b);
+    return hardMove(b);
+  }
+
+  // reset board
+  function resetBoard(){
+    board = Array.from({length:9}, (_,i)=> (i+1).toString());
+    busy = false;
+    render();
+  }
+
+  // initial render
+  resetBoard();
+  show('Choose difficulty, then tap a square to start');
+
+  // expose resetBoard for closing sequences (internal)
+  window.resetTTT = resetBoard;
+
+  // Optional: keyboard controls for desktop (1..9)
+  window.addEventListener('keydown', (ev)=>{
+    if(busy) return;
+    const k = ev.key;
+    if(/^[1-9]$/.test(k)){
+      const idx = Number(k)-1;
+      if(!(board[idx]==='X' || board[idx]==='O')) playerMove(idx);
+    }
+    if(k === 'r') restartBtn.click();
+    if(k === '0') resetScoresBtn.click();
+  });
+
+})();
+</script>
+</body>
+</html> 
